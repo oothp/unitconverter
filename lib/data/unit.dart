@@ -6,6 +6,7 @@
 class Unit {
   final String? name;
   final double? conversion;
+  final String? description;
 
   /// A [Unit] stores its name and conversion factor.
   ///
@@ -13,12 +14,15 @@ class Unit {
   const Unit({
     required String this.name,
     required double this.conversion,
+    required String this.description,
   });
 
   /// Creates a [Unit] from a JSON object.
   Unit.fromJson(Map jsonMap)
       : assert(jsonMap['name'] != null),
         assert(jsonMap['conversion'] != null),
+        assert(jsonMap['description'] != null),
         name = jsonMap['name'],
-        conversion = jsonMap['conversion'].toDouble();
+        conversion = jsonMap['conversion'].toDouble(),
+        description = jsonMap['description'].toString();
 }

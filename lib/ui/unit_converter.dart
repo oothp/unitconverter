@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:unit_converter/data/category2.dart';
 
 import '../data/unit.dart';
+import 'package:unit_converter/api.dart';
 
 const _padding = EdgeInsets.all(16.0);
 
@@ -37,6 +38,8 @@ class _UnitConverterState extends State<UnitConverter> {
   String _convertedValue = '';
   List<DropdownMenuItem>? _unitMenuItems;
   bool _showValidationError = false;
+
+  bool _showErrorUI = false;
 
   final _inputKey = GlobalKey(debugLabel: 'inputText');
 
@@ -80,8 +83,9 @@ class _UnitConverterState extends State<UnitConverter> {
   /// updated output value if a user had previously entered an input.
   void _setDefaults() {
     setState(() {
-      _fromValue = widget.category.units[0];
-      _toValue = widget.category.units[1];
+      final units = widget.category.units;
+      _fromValue = units.isEmpty ? null : units[0];
+      _toValue = units.isEmpty? null : units[1];
     });
     if (_inputValue != null) {
       _updateConversion();
@@ -104,10 +108,31 @@ class _UnitConverterState extends State<UnitConverter> {
     return outputNum;
   }
 
-  void _updateConversion() {
-    setState(() {
-      _convertedValue = _format(_inputValue! * (_toValue!.conversion! / _fromValue!.conversion!));
-    });
+  Future<void> _updateConversion() async {
+    //  API has a handy convert function, so we can use that for
+    // the Currency [Category]
+    if (widget.category.name == apiCategory['name']) {
+      final api = Api();
+      final conversion =
+          await api.convert(apiCategory['route'], _inputValue.toString(), _fromValue!.name, _toValue!.name);
+
+      // api error or not connected.
+      if (conversion == null) {
+        setState(() {
+          _showErrorUI = true;
+        });
+      } else {
+        setState(() {
+          _showErrorUI = false;
+          _convertedValue = _format(conversion);
+        });
+      }
+    } else {
+      // For the static units, we do the conversion ourselves
+      setState(() {
+        _convertedValue = _format(_inputValue! * (_toValue!.conversion! / _fromValue!.conversion!));
+      });
+    }
   }
 
   void _updateInputValue(String input) {
@@ -197,6 +222,29 @@ class _UnitConverterState extends State<UnitConverter> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.category.units.isEmpty
+        || (widget.category.name == apiCategory['name'] && _showErrorUI)) {
+      return SingleChildScrollView(
+        child: Container(
+          margin: _padding,
+          padding: _padding,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16.0),
+            color: widget.category.color['error'],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 180.0, color: Colors.white),
+              Text('Oh no! We can\'t connect right now!',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headline5!.copyWith(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+    }
     final input = Padding(
       padding: _padding,
       child: Column(

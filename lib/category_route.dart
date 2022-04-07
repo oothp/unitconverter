@@ -1,12 +1,11 @@
-import 'dart:collection';
 import 'dart:convert';
-import 'dart:developer';
 
 import 'package:flutter/material.dart';
-import 'package:unit_converter/ui/backdrop.dart';
+import 'package:unit_converter/api.dart';
 import 'package:unit_converter/data/category2.dart';
-import 'package:unit_converter/ui/category_tile.dart';
 import 'package:unit_converter/data/unit.dart';
+import 'package:unit_converter/ui/backdrop.dart';
+import 'package:unit_converter/ui/category_tile.dart';
 import 'package:unit_converter/ui/unit_converter.dart';
 
 class CategoryRoute extends StatefulWidget {
@@ -21,6 +20,8 @@ class _CategoryRouteState extends State<CategoryRoute> {
   Category2? _currentCategory;
 
   final _categories = <Category2>[];
+
+  bool _isLoading = false;
 
   // region
   static const _icons = <String>[
@@ -70,14 +71,16 @@ class _CategoryRouteState extends State<CategoryRoute> {
     }),
   ];
 
+  // endregion
+
   @override
   Future<void> didChangeDependencies() async {
     super.didChangeDependencies();
     // We have static unit conversions located in our assets/data/regular_units.json
     if (_categories.isEmpty) {
       await _retrieveLocalCategories();
+      await _retrieveApiCategory();
     }
-    _defaultCategory = _categories[0];
   }
 
   Future<void> _retrieveLocalCategories() async {
@@ -86,22 +89,11 @@ class _CategoryRouteState extends State<CategoryRoute> {
     if (data is! Map) {
       throw ('Data retrieved from API is not a Map');
     } else {
-      // for (var i = 0; i < data.entries.length; i++) {
-      //   var name = data.entries.toList()[i].key;
-      //   final List unitList = data.values.toList()[i];
-      //   var unitsPerCategory = unitList.map((e) => Unit.fromJson(e)).toList();
-      //   var color = _baseColors[i];
-      //
-      //   var c = Category2(
-      //       name: name, color: color, units: unitsPerCategory, iconLocation: Icons.api_sharp);
-      //   _categories.add(c);
-      // }
       var categoryIndex = 0;
       for (var key in data.keys) {
         final List<Unit> units = data[key].map<Unit>((dynamic data) => Unit.fromJson(data)).toList();
 
-        var category =
-        Category2(
+        var category = Category2(
             name: key, units: units, color: _baseColors[categoryIndex], iconLocation: _icons[categoryIndex]);
         setState(() {
           if (categoryIndex == 0) {
@@ -114,17 +106,36 @@ class _CategoryRouteState extends State<CategoryRoute> {
     }
   }
 
-  // endregion
-
-  // List<Unit> _retrieveUnitList(String categoryName) {
-  //   // return List.generate(10, (int i) {
-  //   //   i += 1;
-  //   //   return Unit(
-  //   //     name: '$categoryName Unit $i',
-  //   //     conversion: i.toDouble(),
-  //   //   );
-  //   // });
-  // }
+  Future<void> _retrieveApiCategory() async {
+    // Add a placeholder while we fetch the Currency category using the API
+    setState(() {
+      _categories.add(Category2(
+        name: apiCategory['name']!,
+        units: [],
+        color: _baseColors.last,
+        iconLocation: _icons.last,
+      ));
+    });
+    final api = Api();
+    final jsonUnits = await api.getUnits(apiCategory['route']);
+    // If the API errors out or we have no internet connection, this category
+    // remains in placeholder mode (disabled)
+    if (jsonUnits != null) {
+      final units = <Unit>[];
+      for (var unit in jsonUnits) {
+        units.add(Unit.fromJson(unit));
+      }
+      setState(() {
+        _categories.removeLast();
+        _categories.add(Category2(
+          name: apiCategory['name']!,
+          units: units,
+          color: _baseColors.last,
+          iconLocation: _icons.last,
+        ));
+      });
+    }
+  }
 
   void _onCategoryTap(Category2 category) {
     setState(() {
@@ -142,7 +153,10 @@ class _CategoryRouteState extends State<CategoryRoute> {
       return GridView.count(
         crossAxisCount: 2,
         childAspectRatio: 3,
-        children: _categories.map((e) => CategoryTile(category: e, onTap: _onCategoryTap)).toList(),
+        children: _categories.map((c) => CategoryTile(category: c, onTap: c.name == apiCategory['name'] &&
+            c.units.isEmpty
+            ? null
+            : _onCategoryTap)).toList(),
       );
     }
   }
@@ -163,9 +177,7 @@ class _CategoryRouteState extends State<CategoryRoute> {
     final listView = Container(
       color: _currentCategory?.color,
       padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 48.0),
-      child: _buildCategoryWidgets(MediaQuery
-          .of(context)
-          .orientation),
+      child: _buildCategoryWidgets(MediaQuery.of(context).orientation),
     );
 
     return Backdrop(
